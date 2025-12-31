@@ -1,0 +1,50 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  --color-zinc-950: #09090b;
+}
+
+@utility shadow-accent {
+  box-shadow: 0 0 20px 0 rgba(239, 68, 68, 0.2);
+}
+
+:root {
+  color-scheme: dark;
+}
+
+@layer base {
+
+  html,
+  body,
+  #root {
+    @apply h-full w-full overflow-hidden bg-zinc-950 text-zinc-100 font-sans;
+  }
+}
+
+@layer utilities {
+  .bento-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 1rem;
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .bento-tile {
+    @apply bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden backdrop-blur-sm transition-all duration-300;
+  }
+
+  .bento-tile-active {
+    @apply border-red-500/30 shadow-accent;
+  }
+
+  .mono-data {
+    @apply font-mono uppercase tracking-wider;
+  }
+}
