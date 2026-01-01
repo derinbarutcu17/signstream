@@ -1,18 +1,17 @@
 import React, { useRef, useEffect } from 'react';
 import Webcam from 'react-webcam';
-import type { Results } from '@mediapipe/hands';
+
 import { HAND_CONNECTIONS } from '@mediapipe/hands';
 import { drawConnectors, drawLandmarks } from '@mediapipe/drawing_utils';
-import { GhostHand } from './GhostHand';
+import type { Results } from '@mediapipe/hands';
 
 interface WebcamTileProps {
     videoRef: React.RefObject<HTMLVideoElement | null>;
     results: Results | null;
     isTrackingReady: boolean;
-    targetLetter: string;
 }
 
-const WebcamTile = ({ videoRef, results, isTrackingReady, targetLetter }: WebcamTileProps) => {
+const WebcamTile = ({ videoRef, results, isTrackingReady }: WebcamTileProps) => {
     const webcamRef = useRef<Webcam>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -21,6 +20,7 @@ const WebcamTile = ({ videoRef, results, isTrackingReady, targetLetter }: Webcam
         const checkVideo = () => {
             if (webcamRef.current?.video) {
                 // Mutate the ref to point to the video element
+                // eslint-disable-next-line
                 (videoRef as React.MutableRefObject<HTMLVideoElement | null>).current = webcamRef.current.video;
                 console.log('[WebcamTile] Video element connected:', webcamRef.current.video.videoWidth, 'x', webcamRef.current.video.videoHeight);
             }
@@ -77,10 +77,9 @@ const WebcamTile = ({ videoRef, results, isTrackingReady, targetLetter }: Webcam
         }
     }, [results]);
 
-
     return (
         <div className="bento-tile bento-tile-active relative bg-black/40 group overflow-hidden h-full">
-            {/* Video Container */}
+            {/* Video Container - No overlays */}
             <div className="w-full h-full flex items-center justify-center overflow-hidden relative">
                 <Webcam
                     ref={webcamRef}
@@ -92,11 +91,6 @@ const WebcamTile = ({ videoRef, results, isTrackingReady, targetLetter }: Webcam
                         height: { ideal: 720 },
                     }}
                 />
-
-                {/* Ghost Hand Overlay */}
-                <div className="absolute inset-0 pointer-events-none z-10 scale-x-[-1] opacity-40">
-                    <GhostHand targetLetter={targetLetter} />
-                </div>
 
                 {/* Canvas Overlay for Hand Tracking */}
                 <canvas

@@ -88,7 +88,7 @@ export class GestureEngine {
             'Pinky': [0, 17, 18, 20]
         };
 
-        const [_, mcp, pip, tip] = indices[fingerName];
+        const [, mcp, pip, tip] = indices[fingerName];
 
         const lastState = this.fingerStates.get(fingerName) || 'Closed';
 

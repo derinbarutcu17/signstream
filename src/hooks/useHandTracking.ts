@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Hands } from '@mediapipe/hands';
 import type { Results } from '@mediapipe/hands';
 import { GestureEngine } from '../lib/GestureEngine';
+import { VectorEngine } from '../lib/VectorEngine';
 
 export const useHandTracking = (videoRef: React.RefObject<HTMLVideoElement | null>) => {
     const [isReady, setIsReady] = useState(false);
@@ -12,8 +13,10 @@ export const useHandTracking = (videoRef: React.RefObject<HTMLVideoElement | nul
     const animationRef = useRef<number | null>(null);
     const isRunningRef = useRef(false);
 
-    // Engine Instance
-    const engineRef = useRef<GestureEngine>(new GestureEngine());
+    // Engine Instances
+    // Using useState with initializer instead of useRef to avoid "Accessing refs during render" lint
+    const [engine] = useState(() => new GestureEngine());
+    const [vectorEngine] = useState(() => new VectorEngine());
 
     // Stable callback for results
     const onResults = useCallback((detectionResults: Results) => {
@@ -21,7 +24,7 @@ export const useHandTracking = (videoRef: React.RefObject<HTMLVideoElement | nul
 
         // Update physics engine
         if (detectionResults) {
-            engineRef.current.update(detectionResults);
+            engine.update(detectionResults);
         }
 
         // Mark as ready once we receive any results (even without hands)
@@ -30,7 +33,7 @@ export const useHandTracking = (videoRef: React.RefObject<HTMLVideoElement | nul
             isRunningRef.current = true;
             console.log('[HandTracking] Detection active! Ready for recognition.');
         }
-    }, []);
+    }, [engine]);
 
 
     // Initialize MediaPipe only once
@@ -78,7 +81,7 @@ export const useHandTracking = (videoRef: React.RefObject<HTMLVideoElement | nul
             if (video && hands && video.readyState >= 2 && video.videoWidth > 0) {
                 try {
                     await hands.send({ image: video });
-                } catch (err) {
+                } catch {
                     // Silently ignore errors during detection
                 }
             }
@@ -103,48 +106,57 @@ export const useHandTracking = (videoRef: React.RefObject<HTMLVideoElement | nul
     }, [videoRef]);
 
     // Compute finger states and metadata from results
-    const detectionData = {
-        confidence: results?.multiHandedness?.[0]?.score || 0,
-        fingerStates: (() => {
-            if (!results?.multiHandLandmarks?.[0]) return ['Searching...'];
+    const detectionData = useMemo(() => {
+        if (!results?.multiHandWorldLandmarks?.[0]) {
+            return {
+                confidence: 0,
+                fingerStates: ['Searching...'],
+                handCount: 0,
+                landmarks: null,
+                worldLandmarks: null,
+                bestMatch: null,
+                similarity: 0
+            };
+        }
 
-            const engine = engineRef.current;
-            const states: string[] = [];
+        const worldLandmarks = results.multiHandWorldLandmarks[0];
+        const states: string[] = [];
 
-            // 1. Finger States (Engine uses Angle-Based logic now)
-            const fingers: Array<'Index' | 'Middle' | 'Ring' | 'Pinky'> = ['Index', 'Middle', 'Ring', 'Pinky'];
+        // 1. Finger States
+        const fingers: Array<'Index' | 'Middle' | 'Ring' | 'Pinky'> = ['Index', 'Middle', 'Ring', 'Pinky'];
+        fingers.forEach(f => {
+            const state = engine.getFingerState(f);
+            if (state !== 'Closed') states.push(`${f} ${state}`);
+        });
 
-            fingers.forEach(f => {
-                const state = engine.getFingerState(f);
-                if (state !== 'Closed') states.push(`${f} ${state}`);
-            });
+        // 2. Thumb State
+        const thumbState = engine.getThumbState();
+        if (thumbState !== 'Closed') states.push(`Thumb ${thumbState}`);
 
-            // 2. Thumb State
-            const thumbState = engine.getThumbState();
-            if (thumbState === 'Extended') states.push('Thumb Extended');
-            if (thumbState === 'Over') states.push('Thumb Over');
-            if (thumbState === 'Under') states.push('Thumb Under');
-            if (thumbState === 'Side') states.push('Thumb Side');
+        // 3. Semantic States
+        const semanticStates = engine.getSemanticStates();
+        states.push(...semanticStates);
 
-            // 3. Semantic States (Pinch, Circular, Crossed)
-            const semanticStates = engine.getSemanticStates();
-            states.push(...semanticStates);
+        // 4. Vector Match (Internal to hook for stability)
+        const match = vectorEngine.matchPose(worldLandmarks);
 
-            // SPECIAL CASE: Resolve F vs B confusion
-            // If Thumb is touching Index (Pinch), Index is effectively formed into a loop.
-            // It should NOT count as "Index Extended" for the purpose of 'B' detection (Open Hand).
-            if (states.includes('Thumb Touching Index')) {
-                const idx = states.indexOf('Index Extended');
-                if (idx > -1) states.splice(idx, 1);
-            }
+        return {
+            confidence: results.multiHandedness?.[0]?.score || 0,
+            fingerStates: states.length > 0 ? states : ['Fist / Closed'],
+            handCount: results.multiHandLandmarks?.length || 0,
+            landmarks: results.multiHandLandmarks[0],
+            worldLandmarks: worldLandmarks,
+            bestMatch: match.score > 0.6 ? match.letter : null,
+            similarity: match.score
+        };
+    }, [results, engine, vectorEngine]);
 
-            return states.length > 0 ? states : ['Fist / Closed'];
-        })(),
-        handCount: results?.multiHandLandmarks?.length || 0,
-        landmarks: results?.multiHandLandmarks?.[0] || null,
-        worldLandmarks: results?.multiHandWorldLandmarks?.[0] || null
-    };
-
+    // Debug logging effect
+    useEffect(() => {
+        if (detectionData.similarity > 0) {
+            console.log(`[HandTracking] Raw Score: ${detectionData.similarity.toFixed(2)} | Best Match: ${detectionData.bestMatch || 'None'}`);
+        }
+    }, [detectionData.bestMatch, detectionData.similarity]);
 
     return {
         isReady,
