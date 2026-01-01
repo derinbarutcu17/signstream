@@ -1,10 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 import WebcamTile from './components/dashboard/WebcamTile';
 import GoalTile from './components/dashboard/GoalTile';
 import FeedbackTile from './components/dashboard/FeedbackTile';
 import ScoreTile from './components/dashboard/ScoreTile';
 import { useHandTracking } from './hooks/useHandTracking';
-import { useStablePrediction } from './hooks/useStablePrediction';
 import ReferenceGuide from './components/dashboard/ReferenceGuide';
 
 const ALPHABET = ['A', 'B', 'C', 'D', 'E', 'F', 'I', 'L', 'O', 'R', 'S', 'U', 'V', 'W', 'Y'];
@@ -32,26 +31,19 @@ function App() {
   const [score] = useState(0);
   const [isReferenceOpen, setIsReferenceOpen] = useState(false);
 
+  // Hand tracking hook - now includes GestureLogic recognition
   const videoRef = useRef<HTMLVideoElement>(null);
   const { isReady, results, detectionData } = useHandTracking(videoRef);
 
   const targetLetter = ALPHABET[targetIndex];
 
-  // Stability Filter (Debounce detection)
-  const stablePrediction = useStablePrediction(detectionData.bestMatch, 5, 0.4);
-
-  // Sync Logic
-  useEffect(() => {
-    // Accuracy is based on the target letter match score from the engine
-    // This is handled by consumption of detectionData
-    // Note: We could move targetSimilarity calculation to useHandTracking too.
-  }, []);
-
+  // Score when detection matches target
   const handleNext = () => setTargetIndex(prev => (prev + 1) % ALPHABET.length);
   const handlePrev = () => setTargetIndex(prev => (prev - 1 + ALPHABET.length) % ALPHABET.length);
 
-  // We should ideally calculate targetSimilarity here to avoid extra renders
-  // but it's okay for now if we don't have a loop.
+  // Use the new GestureLogic detection directly
+  const displayedLetter = detectionData.bestMatch;
+  const displayedConfidence = detectionData.similarity > 0 ? detectionData.similarity : 0;
 
   return (
     <main className="h-dvh w-dvw bg-zinc-950 flex flex-col transition-colors duration-700 font-sans">
@@ -64,8 +56,23 @@ function App() {
           </div>
           <div>
             <h1 className="text-xl font-bold tracking-tight text-white leading-none">Sign Stream</h1>
-            <p className="text-[10px] mono-data text-zinc-500 mt-1 uppercase tracking-widest opacity-60">Gesture Recognition Engine</p>
+            <p className="text-[10px] mono-data text-zinc-500 mt-1 uppercase tracking-widest opacity-60">
+              {isReady ? 'Geometric Engine Ready' : 'Loading...'}
+            </p>
           </div>
+        </div>
+
+        {/* Status indicator */}
+        <div className="flex items-center gap-3">
+          <div className={`px-3 py-1.5 rounded-lg text-xs font-medium ${displayedLetter
+            ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+            : 'bg-zinc-800 text-zinc-400'
+            }`}>
+            {displayedLetter ? `Detecting: ${displayedLetter}` : 'No match'}
+          </div>
+          <span className="text-[10px] text-zinc-500">
+            {displayedConfidence > 0 ? `${(displayedConfidence * 100).toFixed(0)}%` : '--'}
+          </span>
         </div>
       </header>
 
@@ -79,12 +86,15 @@ function App() {
         <div className="flex flex-col gap-4 h-full min-h-0">
           <GoalTile
             targetLetter={targetLetter}
-            detectedLetter={stablePrediction}
+            detectedLetter={displayedLetter}
             onOpenReference={() => setIsReferenceOpen(true)}
             onNext={handleNext}
             onPrev={handlePrev}
           />
-          <ScoreTile score={Math.round(detectionData.similarity * 100)} totalScore={score} />
+          <ScoreTile
+            score={Math.round(displayedConfidence * 100)}
+            totalScore={score}
+          />
           <FeedbackTile
             confidence={detectionData.confidence}
             fingerStates={detectionData.fingerStates}

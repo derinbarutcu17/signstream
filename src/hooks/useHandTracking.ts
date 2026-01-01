@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Hands } from '@mediapipe/hands';
 import type { Results } from '@mediapipe/hands';
-import { GestureEngine } from '../lib/GestureEngine';
-import { VectorEngine } from '../lib/VectorEngine';
+import { GestureLogic } from '../lib/GestureLogic';
 
 export const useHandTracking = (videoRef: React.RefObject<HTMLVideoElement | null>) => {
     const [isReady, setIsReady] = useState(false);
@@ -13,19 +12,12 @@ export const useHandTracking = (videoRef: React.RefObject<HTMLVideoElement | nul
     const animationRef = useRef<number | null>(null);
     const isRunningRef = useRef(false);
 
-    // Engine Instances
-    // Using useState with initializer instead of useRef to avoid "Accessing refs during render" lint
-    const [engine] = useState(() => new GestureEngine());
-    const [vectorEngine] = useState(() => new VectorEngine());
+    // Stateless gesture logic - no state to track
+    const [logic] = useState(() => new GestureLogic());
 
     // Stable callback for results
     const onResults = useCallback((detectionResults: Results) => {
         setResults(detectionResults);
-
-        // Update physics engine
-        if (detectionResults) {
-            engine.update(detectionResults);
-        }
 
         // Mark as ready once we receive any results (even without hands)
         if (!isRunningRef.current) {
@@ -33,7 +25,7 @@ export const useHandTracking = (videoRef: React.RefObject<HTMLVideoElement | nul
             isRunningRef.current = true;
             console.log('[HandTracking] Detection active! Ready for recognition.');
         }
-    }, [engine]);
+    }, []);
 
 
     // Initialize MediaPipe only once
@@ -120,43 +112,41 @@ export const useHandTracking = (videoRef: React.RefObject<HTMLVideoElement | nul
         }
 
         const worldLandmarks = results.multiHandWorldLandmarks[0];
-        const states: string[] = [];
 
-        // 1. Finger States
-        const fingers: Array<'Index' | 'Middle' | 'Ring' | 'Pinky'> = ['Index', 'Middle', 'Ring', 'Pinky'];
-        fingers.forEach(f => {
-            const state = engine.getFingerState(f);
-            if (state !== 'Closed') states.push(`${f} ${state}`);
-        });
-
-        // 2. Thumb State
-        const thumbState = engine.getThumbState();
-        if (thumbState !== 'Closed') states.push(`Thumb ${thumbState}`);
-
-        // 3. Semantic States
-        const semanticStates = engine.getSemanticStates();
-        states.push(...semanticStates);
-
-        // 4. Vector Match (Internal to hook for stability)
-        const match = vectorEngine.matchPose(worldLandmarks);
+        // Use new stateless GestureLogic for recognition
+        const { match, score } = logic.analyze(worldLandmarks);
 
         return {
             confidence: results.multiHandedness?.[0]?.score || 0,
-            fingerStates: states.length > 0 ? states : ['Fist / Closed'],
+            fingerStates: match ? [`Detected: ${match}`] : ['Analyzing...'],
             handCount: results.multiHandLandmarks?.length || 0,
             landmarks: results.multiHandLandmarks[0],
             worldLandmarks: worldLandmarks,
-            bestMatch: match.score > 0.6 ? match.letter : null,
-            similarity: match.score
+            bestMatch: match,
+            similarity: score
         };
-    }, [results, engine, vectorEngine]);
+    }, [results, logic]);
 
     // Debug logging effect
     useEffect(() => {
         if (detectionData.similarity > 0) {
-            console.log(`[HandTracking] Raw Score: ${detectionData.similarity.toFixed(2)} | Best Match: ${detectionData.bestMatch || 'None'}`);
+            console.log(`[HandTracking] Score: ${detectionData.similarity.toFixed(2)} | Match: ${detectionData.bestMatch || 'None'}`);
         }
     }, [detectionData.bestMatch, detectionData.similarity]);
+
+    // Keyboard listener for calibration (Spacebar logs current detection)
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.code === 'Space' && detectionData.worldLandmarks) {
+                e.preventDefault();
+                console.log('=== CALIBRATION TRIGGERED ===');
+                console.log(`Current: ${detectionData.bestMatch} (${(detectionData.similarity * 100).toFixed(0)}%)`);
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [detectionData]);
 
     return {
         isReady,

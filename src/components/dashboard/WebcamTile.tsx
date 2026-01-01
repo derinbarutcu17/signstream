@@ -48,13 +48,15 @@ const WebcamTile = ({ videoRef, results, isTrackingReady }: WebcamTileProps) => 
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        // Match canvas size to video
+        // Always match canvas size to video (prevents scaling issues)
         if (video.videoWidth > 0 && video.videoHeight > 0) {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
+            if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+            }
         }
 
-        // Clear canvas
+        // Always clear the entire canvas first
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         // Draw landmarks if we have results
