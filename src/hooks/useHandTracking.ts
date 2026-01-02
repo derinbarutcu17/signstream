@@ -18,6 +18,9 @@ export const useHandTracking = (videoRef: React.RefObject<HTMLVideoElement | nul
     const gestureCountRef = useRef(0);
     const STABILITY_THRESHOLD = 3; // Need 3 consistent frames to switch
 
+    // Smoothed accuracy value for less jittery display
+    const smoothedSimilarityRef = useRef(0);
+
     // Stateless gesture logic - no state to track
     const [logic] = useState(() => new GestureLogic());
 
@@ -106,6 +109,8 @@ export const useHandTracking = (videoRef: React.RefObject<HTMLVideoElement | nul
     // Compute finger states and metadata from results
     const detectionData = useMemo(() => {
         if (!results?.multiHandWorldLandmarks?.[0]) {
+            // Smoothly decay to 0 when no hand detected
+            smoothedSimilarityRef.current = smoothedSimilarityRef.current * 0.9;
             return {
                 confidence: 0,
                 fingerStates: ['Searching...'],
@@ -113,14 +118,14 @@ export const useHandTracking = (videoRef: React.RefObject<HTMLVideoElement | nul
                 landmarks: null,
                 worldLandmarks: null,
                 bestMatch: null,
-                similarity: 0
+                similarity: smoothedSimilarityRef.current
             };
         }
 
         const worldLandmarks = results.multiHandWorldLandmarks[0];
 
         // Use new stateless GestureLogic for recognition
-        const { match: rawMatch, score } = logic.analyze(worldLandmarks);
+        const { match: rawMatch } = logic.analyze(worldLandmarks);
 
         // Gesture stabilization: require N consistent detections before switching
         let stableMatch = currentGestureRef.current;
@@ -140,14 +145,21 @@ export const useHandTracking = (videoRef: React.RefObject<HTMLVideoElement | nul
             currentGestureRef.current = rawMatch;
         }
 
+        // Use MediaPipe's hand detection confidence as the accuracy (not always 100%)
+        const rawConfidence = results.multiHandedness?.[0]?.score || 0;
+
+        // Apply exponential moving average smoothing (factor 0.15 = very smooth)
+        const smoothingFactor = 0.15;
+        smoothedSimilarityRef.current = smoothedSimilarityRef.current * (1 - smoothingFactor) + rawConfidence * smoothingFactor;
+
         return {
-            confidence: results.multiHandedness?.[0]?.score || 0,
+            confidence: rawConfidence,
             fingerStates: stableMatch ? [`Detected: ${stableMatch}`] : ['Analyzing...'],
             handCount: results.multiHandLandmarks?.length || 0,
             landmarks: results.multiHandLandmarks[0],
             worldLandmarks: worldLandmarks,
             bestMatch: stableMatch,
-            similarity: score
+            similarity: smoothedSimilarityRef.current
         };
     }, [results, logic, STABILITY_THRESHOLD]);
 
