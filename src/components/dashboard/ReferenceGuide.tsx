@@ -10,15 +10,11 @@ interface ReferenceGuideProps {
 const GESTURES = [
     { letter: 'A', name: 'Fist', description: 'Closed fist with thumb against the side of the index finger.' },
     { letter: 'B', name: 'Flat', description: 'Open palm with fingers together and thumb tucked across the palm.' },
-    { letter: 'C', name: 'Curved', description: 'Hand curved into a "C" shape, fingers and thumb separated.' },
     { letter: 'D', name: 'Index', description: 'Index finger points up, others curved to touch the thumb.' },
-    { letter: 'E', name: 'Folded', description: 'All fingers folded down with the thumb tucked under.' },
     { letter: 'F', name: 'Touch', description: 'Index and thumb tips touch, other fingers extended and spread.' },
     { letter: 'I', name: 'Pinky', description: 'Hand in a fist with only the pinky finger extended up.' },
     { letter: 'L', name: 'L-Shape', description: 'Index and thumb extended, forming a "L" shape.' },
-    { letter: 'O', name: 'Circle', description: 'All fingers curved to touch the thumb, forming an "O".' },
     { letter: 'R', name: 'Crossed', description: 'Index and middle fingers extended and crossed.' },
-    { letter: 'S', name: 'Solid', description: 'Closed fist with the thumb tucked over the fingers.' },
     { letter: 'U', name: 'Together', description: 'Index and middle fingers extended and held together.' },
     { letter: 'V', name: 'Peace', description: 'Index and middle fingers extended and separated.' },
     { letter: 'W', name: 'Three', description: 'Index, middle, and ring fingers extended and spread.' },
@@ -49,7 +45,7 @@ const ReferenceGuide: React.FC<ReferenceGuideProps> = ({ isOpen, onClose }) => {
                         <div className="flex justify-between items-center mb-6 shrink-0">
                             <div>
                                 <h2 className="text-xl font-bold text-white">ASL Reference Guide</h2>
-                                <p className="text-[10px] mono-data text-zinc-500 uppercase tracking-widest mt-1">Gestural Library v2.0 • 15 Letters</p>
+                                <p className="text-[10px] mono-data text-zinc-500 uppercase tracking-widest mt-1">Gestural Library v2.0 • 11 Letters</p>
                             </div>
                             <button
                                 onClick={onClose}

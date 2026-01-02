@@ -6,20 +6,16 @@ import ScoreTile from './components/dashboard/ScoreTile';
 import { useHandTracking } from './hooks/useHandTracking';
 import ReferenceGuide from './components/dashboard/ReferenceGuide';
 
-const ALPHABET = ['A', 'B', 'C', 'D', 'E', 'F', 'I', 'L', 'O', 'R', 'S', 'U', 'V', 'W', 'Y'];
+const ALPHABET = ['A', 'B', 'D', 'F', 'I', 'L', 'R', 'U', 'V', 'W', 'Y'];
 
 const INSTRUCTIONS: Record<string, string> = {
   'A': 'Thumb on the side of a closed fist.',
   'B': 'All fingers straight up, thumb tucked across palm.',
-  'C': 'Curved hand forming a "C" shape.',
   'D': 'Index finger up, others touching thumb.',
-  'E': 'All fingers folded over a tucked thumb.',
   'F': 'Index and thumb touching, other fingers up.',
   'I': 'Pinky finger straight up, others closed.',
   'L': 'Index and thumb extended (forming an L).',
-  'O': 'All fingers touching thumb tip in a circle.',
   'R': 'Index and middle fingers crossed.',
-  'S': 'Tight fist with thumb over the middle.',
   'U': 'Index and middle fingers up and touching.',
   'V': 'Index and middle fingers in a "V" shape.',
   'W': 'Index, middle, and ring fingers up and spread.',
