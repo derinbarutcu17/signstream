@@ -5,45 +5,88 @@ export type FingerName = 'thumb' | 'index' | 'middle' | 'ring' | 'pinky';
 
 export interface PoseConfig {
     name: string;
-    // Required Curl State: "Open" (straight) or "Closed" (bent)
-    // We can add "Half" later if needed.
     curls: Record<FingerName, 'Open' | 'Closed' | 'Any'>;
-
-    // Optional: Required Direction relative to palm (only checked if finger is Open)
-    // x: +1 (Right), -1 (Left)
-    // y: +1 (Up), -1 (Down)
-    // z: +1 (Palm Front), -1 (Palm Back)
+    // Optional direction constraints
     directions?: Partial<Record<FingerName, Point3D>>;
 }
 
+// Order matters! More specific poses should come FIRST
+// Poses with more Closed fingers are more distinctive
 export const POSE_LIBRARY: PoseConfig[] = [
+    // === FIST-BASED (Most distinctive - many closed fingers) ===
     {
         name: 'A',
+        // Fist with thumb on side (extended outward)
         curls: { thumb: 'Open', index: 'Closed', middle: 'Closed', ring: 'Closed', pinky: 'Closed' },
-        // Thumb must point Up relative to hand
-        directions: { thumb: { x: 0, y: 1, z: 0 } }
     },
     {
-        name: 'B',
-        curls: { thumb: 'Closed', index: 'Open', middle: 'Open', ring: 'Open', pinky: 'Open' },
-        // No specific direction needed, the curls define B perfectly
+        name: 'S',
+        // Tight fist with thumb over fingers
+        curls: { thumb: 'Closed', index: 'Closed', middle: 'Closed', ring: 'Closed', pinky: 'Closed' },
     },
     {
-        name: 'C',
-        // C is special: fingers are "Half" open. We'll treat them as Open but check shape in Engine?
-        // Or strictly: technically C is Open fingers but curved.
-        // For simplicity, let's define it as Open but add a specific Vector requirement later.
-        curls: { thumb: 'Open', index: 'Open', middle: 'Open', ring: 'Open', pinky: 'Open' },
-        directions: { index: { x: 0, y: 0, z: 1 } } // Index points FORWARD (Z) not Up
+        name: 'E',
+        // All fingers curled, thumb tucked
+        curls: { thumb: 'Closed', index: 'Closed', middle: 'Closed', ring: 'Closed', pinky: 'Closed' },
     },
+
+    // === ONE FINGER UP ===
+    {
+        name: 'I',
+        // Only pinky up
+        curls: { thumb: 'Closed', index: 'Closed', middle: 'Closed', ring: 'Closed', pinky: 'Open' },
+    },
+    {
+        name: 'D',
+        // Only index up (others touching thumb)
+        curls: { thumb: 'Open', index: 'Open', middle: 'Closed', ring: 'Closed', pinky: 'Closed' },
+    },
+
+    // === TWO FINGERS UP ===
     {
         name: 'V',
+        // Peace sign: index + middle up, spread apart
         curls: { thumb: 'Closed', index: 'Open', middle: 'Open', ring: 'Closed', pinky: 'Closed' },
-        // Index points slightly Left, Middle slightly Right
-        directions: {
-            index: { x: -0.2, y: 1, z: 0 },
-            middle: { x: 0.2, y: 1, z: 0 }
-        }
     },
-    // ... Add other letters here
+    {
+        name: 'U',
+        // Index + middle up together (touching)
+        curls: { thumb: 'Closed', index: 'Open', middle: 'Open', ring: 'Closed', pinky: 'Closed' },
+    },
+    {
+        name: 'R',
+        // Index + middle crossed
+        curls: { thumb: 'Closed', index: 'Open', middle: 'Open', ring: 'Closed', pinky: 'Closed' },
+    },
+    {
+        name: 'L',
+        // Thumb + index extended (L shape)
+        curls: { thumb: 'Open', index: 'Open', middle: 'Closed', ring: 'Closed', pinky: 'Closed' },
+    },
+    {
+        name: 'Y',
+        // Thumb + pinky extended
+        curls: { thumb: 'Open', index: 'Closed', middle: 'Closed', ring: 'Closed', pinky: 'Open' },
+    },
+
+    // === THREE FINGERS UP ===
+    {
+        name: 'W',
+        // Index + middle + ring up and spread
+        curls: { thumb: 'Closed', index: 'Open', middle: 'Open', ring: 'Open', pinky: 'Closed' },
+    },
+    {
+        name: 'F',
+        // Thumb + index touching (OK sign), other 3 up
+        curls: { thumb: 'Closed', index: 'Closed', middle: 'Open', ring: 'Open', pinky: 'Open' },
+    },
+
+    // === FOUR/FIVE FINGERS (Least distinctive - put last) ===
+    {
+        name: 'B',
+        // Flat hand: all 4 fingers up, thumb tucked across palm
+        curls: { thumb: 'Closed', index: 'Open', middle: 'Open', ring: 'Open', pinky: 'Open' },
+    },
+    // C is removed because it's too ambiguous with just curl detection
+    // It requires curvature analysis which we don't have yet
 ];

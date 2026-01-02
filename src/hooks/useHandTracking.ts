@@ -12,6 +12,12 @@ export const useHandTracking = (videoRef: React.RefObject<HTMLVideoElement | nul
     const animationRef = useRef<number | null>(null);
     const isRunningRef = useRef(false);
 
+    // Gesture stabilization refs - require consistent detection to switch
+    const currentGestureRef = useRef<string | null>(null);
+    const pendingGestureRef = useRef<string | null>(null);
+    const gestureCountRef = useRef(0);
+    const STABILITY_THRESHOLD = 3; // Need 3 consistent frames to switch
+
     // Stateless gesture logic - no state to track
     const [logic] = useState(() => new GestureLogic());
 
@@ -114,18 +120,36 @@ export const useHandTracking = (videoRef: React.RefObject<HTMLVideoElement | nul
         const worldLandmarks = results.multiHandWorldLandmarks[0];
 
         // Use new stateless GestureLogic for recognition
-        const { match, score } = logic.analyze(worldLandmarks);
+        const { match: rawMatch, score } = logic.analyze(worldLandmarks);
+
+        // Gesture stabilization: require N consistent detections before switching
+        let stableMatch = currentGestureRef.current;
+
+        if (rawMatch !== pendingGestureRef.current) {
+            // New gesture, start counting
+            pendingGestureRef.current = rawMatch;
+            gestureCountRef.current = 1;
+        } else {
+            // Same gesture, increment count
+            gestureCountRef.current++;
+        }
+
+        // If we've seen the same gesture N times, accept it
+        if (gestureCountRef.current >= STABILITY_THRESHOLD) {
+            stableMatch = rawMatch;
+            currentGestureRef.current = rawMatch;
+        }
 
         return {
             confidence: results.multiHandedness?.[0]?.score || 0,
-            fingerStates: match ? [`Detected: ${match}`] : ['Analyzing...'],
+            fingerStates: stableMatch ? [`Detected: ${stableMatch}`] : ['Analyzing...'],
             handCount: results.multiHandLandmarks?.length || 0,
             landmarks: results.multiHandLandmarks[0],
             worldLandmarks: worldLandmarks,
-            bestMatch: match,
+            bestMatch: stableMatch,
             similarity: score
         };
-    }, [results, logic]);
+    }, [results, logic, STABILITY_THRESHOLD]);
 
     // Debug logging effect
     useEffect(() => {

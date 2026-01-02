@@ -1,147 +1,196 @@
 // src/lib/GestureLogic.ts
+// Gesture recognition using geometric constraints
 import { VectorMath } from './VectorMath';
 import type { Point3D } from './VectorMath';
-import { POSE_LIBRARY } from './PoseLibrary';
-import type { PoseConfig, FingerName } from './PoseLibrary';
+
+type FingerName = 'thumb' | 'index' | 'middle' | 'ring' | 'pinky';
+type CurlState = Record<FingerName, boolean>; // true = extended/open
 
 export class GestureLogic {
 
-    /**
-     * Main function to call from App.tsx
-     */
     public analyze(landmarks: Point3D[]): { match: string | null; score: number } {
         if (landmarks.length < 21) return { match: null, score: 0 };
 
-        // 1. Calculate Finger Curls (The "Shape")
-        const curls = this.calculateCurls(landmarks);
+        // Get all the measurements we need
+        const ext = this.getExtensions(landmarks);
+        const spread = this.getFingerSpread(landmarks);
+        const thumbOut = this.isThumbOut(landmarks);
+        const thumbIndexTouching = this.isThumbIndexTouching(landmarks);
 
-        // 2. Calculate Local Coordinate Basis (The "Rotation Fix")
-        const basis = this.calculateBasis(landmarks);
+        // Count extended fingers (excluding thumb)
+        const fingerCount = [ext.index, ext.middle, ext.ring, ext.pinky].filter(Boolean).length;
 
-        // DEBUG: Log curl states
-        console.log('[GestureLogic] Curls:', curls);
+        // Debug output
+        console.log('[Gesture]', JSON.stringify({
+            ext: { t: ext.thumb, i: ext.index, m: ext.middle, r: ext.ring, p: ext.pinky },
+            spread: spread.toFixed(1),
+            thumbOut,
+            thumbIndexTouching,
+            fingerCount
+        }));
 
-        // 3. Score against Library
-        let bestScore = -1;
-        let bestMatch: string | null = null;
+        // === DETECTION LOGIC (most specific first) ===
 
-        for (const pose of POSE_LIBRARY) {
-            const score = this.scorePose(pose, curls, landmarks, basis);
-            if (score > bestScore && score > 0.6) { // 60% Confidence Threshold (lowered for testing)
-                bestScore = score;
-                bestMatch = pose.name;
+        // F = Thumb and index touching/curled, middle+ring+pinky extended
+        // Check this BEFORE 4-finger check since it's more specific
+        if (thumbIndexTouching && ext.middle && ext.ring && ext.pinky) {
+            return { match: 'F', score: 1.0 };
+        }
+
+        // FOUR FINGERS = B (flat hand)
+        if (fingerCount === 4) {
+            return { match: 'B', score: 1.0 };
+        }
+
+        // THREE FINGERS
+        if (fingerCount === 3) {
+            // Index + Middle + Ring = W
+            if (ext.index && ext.middle && ext.ring && !ext.pinky) {
+                return { match: 'W', score: 1.0 };
+            }
+            // Middle + Ring + Pinky (no index) = could also be F, but caught above
+        }
+
+        // TWO FINGERS
+        if (fingerCount === 2) {
+            // Index + Middle (V, U, R)
+            if (ext.index && ext.middle && !ext.ring && !ext.pinky) {
+                // R = crossed fingers (very tight spread)
+                if (spread < 0.8) {
+                    return { match: 'R', score: 1.0 };
+                }
+                // V = spread apart
+                else if (spread > 1.5) {
+                    return { match: 'V', score: 1.0 };
+                }
+                // U = together but not crossed
+                else {
+                    return { match: 'U', score: 1.0 };
+                }
             }
         }
 
-        return { match: bestMatch, score: bestScore };
+        // ONE FINGER
+        if (fingerCount === 1) {
+            // Pinky only
+            if (ext.pinky && !ext.ring && !ext.middle && !ext.index) {
+                // Y = thumb also extended/visible, I = just pinky
+                return { match: ext.thumb ? 'Y' : 'I', score: 1.0 };
+            }
+            // Index only
+            // L = thumb ALSO extended (L-shape with thumb + index)
+            // D = just index pointing up (no thumb extended)
+            if (ext.index && !ext.middle) {
+                return { match: ext.thumb ? 'L' : 'D', score: 1.0 };
+            }
+        }
+
+        // FIST (no fingers extended) - always A
+        // (S and E removed - too similar and unreliable to detect)
+        if (fingerCount === 0) {
+            return { match: 'A', score: 1.0 };
+        }
+
+        return { match: null, score: 0 };
     }
 
-    // --- Logic Internals ---
-
-    private calculateCurls(lm: Point3D[]): Record<FingerName, 'Open' | 'Closed'> {
+    // Check if each finger is extended
+    private getExtensions(lm: Point3D[]): CurlState {
         const wrist = lm[0];
 
-        // Heuristic: If Tip is further from Wrist than MCP is, it's OPEN.
-        // Using 1.1 multiplier for lenient detection
-        const isOpen = (tipIdx: number, mcpIdx: number) => {
+        const isExtended = (tipIdx: number, mcpIdx: number) => {
             const tipDist = VectorMath.dist(lm[tipIdx], wrist);
             const mcpDist = VectorMath.dist(lm[mcpIdx], wrist);
-            return tipDist > (mcpDist * 1.1); // 1.1 is lenient. Use 1.3 for strict.
+            return tipDist > mcpDist * 1.2;
+        };
+
+        // Thumb: check if tip is far from index base
+        const thumbExtended = () => {
+            const thumbTip = lm[4];
+            const indexMcp = lm[5];
+            const tipToIndex = VectorMath.dist(thumbTip, indexMcp);
+            const wristToIndex = VectorMath.dist(wrist, indexMcp);
+            return tipToIndex > wristToIndex * 0.7;
         };
 
         return {
-            thumb: isOpen(4, 2) ? 'Open' : 'Closed',
-            index: isOpen(8, 5) ? 'Open' : 'Closed',
-            middle: isOpen(12, 9) ? 'Open' : 'Closed',
-            ring: isOpen(16, 13) ? 'Open' : 'Closed',
-            pinky: isOpen(20, 17) ? 'Open' : 'Closed',
+            thumb: thumbExtended(),
+            index: isExtended(8, 5),
+            middle: isExtended(12, 9),
+            ring: isExtended(16, 13),
+            pinky: isExtended(20, 17),
         };
     }
 
-    private calculateBasis(lm: Point3D[]) {
-        // Construct a coordinate system that moves WITH the hand
-        const wrist = lm[0];
+    // Is thumb sticking OUT from the fist (for A vs S, L vs D, Y vs I)
+    // A-BIASED: Default is thumbOut = true (A)
+    // S = ONLY when thumb is deeply tucked IN FRONT of the curled fingers
+    private isThumbOut(lm: Point3D[]): boolean {
+        const thumbTip = lm[4];
         const indexMcp = lm[5];
+        const middleMcp = lm[9];
         const pinkyMcp = lm[17];
+        const wrist = lm[0];
+        const indexPip = lm[6];  // Proximal interphalangeal joint of index
 
-        // X-Axis: Line from Index Knuckle to Pinky Knuckle
-        const xAxis = VectorMath.normalize(VectorMath.sub(pinkyMcp, indexMcp));
+        // Create a palm normal vector using cross product
+        // This gives us the direction the palm is facing (forward/backward)
+        const v1 = VectorMath.sub(indexMcp, wrist);
+        const v2 = VectorMath.sub(pinkyMcp, wrist);
+        const palmNormal = VectorMath.cross(v1, v2);
+        const palmNormalNorm = VectorMath.normalize(palmNormal);
 
-        // Z-Axis: Palm Normal (Out of hand)
-        const wristToIndex = VectorMath.sub(indexMcp, wrist);
-        const zAxis = VectorMath.normalize(VectorMath.cross(xAxis, wristToIndex));
+        // Vector from palm center (middleMcp) to thumb tip
+        const palmToThumb = VectorMath.sub(thumbTip, middleMcp);
 
-        // Y-Axis: Straight Up from palm
-        const yAxis = VectorMath.normalize(VectorMath.cross(zAxis, xAxis));
+        // Project onto palm normal to get depth (how far in front of palm)
+        // Positive = in front of palm (toward camera when palm faces camera)
+        const depthFromPalm = VectorMath.dot(palmToThumb, palmNormalNorm);
+        const palmWidthDist = VectorMath.dist(pinkyMcp, indexMcp);
 
-        return { x: xAxis, y: yAxis, z: zAxis };
+        // For S: Thumb must be SIGNIFICANTLY in front of the palm
+        // This means the thumb is wrapped OVER the curled fingers
+        // Require depth > 0.6x palm width (very strict - thumb must be deeply tucked)
+        const isDeepInFront = depthFromPalm > palmWidthDist * 0.6;
+
+        // Also check if thumb is close to the fingers (near index PIP joint)
+        // For S, thumb should be close to where the fingers curl
+        const thumbToIndexPip = VectorMath.dist(thumbTip, indexPip);
+        const isNearFingers = thumbToIndexPip < palmWidthDist * 0.8;
+
+        // S = thumb is deeply in front AND close to the curled fingers
+        // A = everything else (default)
+        const isThumbTuckedForS = isDeepInFront && isNearFingers;
+
+        // Return TRUE for A (thumb visible/out), FALSE for S (thumb tucked)
+        return !isThumbTuckedForS;
     }
 
-    private scorePose(
-        pose: PoseConfig,
-        currentCurls: Record<FingerName, 'Open' | 'Closed'>,
-        lm: Point3D[],
-        basis: { x: Point3D; y: Point3D; z: Point3D }
-    ): number {
-        let score = 0;
-        const fingers: FingerName[] = ['thumb', 'index', 'middle', 'ring', 'pinky'];
+    // Check if thumb and index finger tips are touching/close (for F gesture)
+    private isThumbIndexTouching(lm: Point3D[]): boolean {
+        const thumbTip = lm[4];
+        const indexTip = lm[8];
+        const indexMcp = lm[5];
+        const middleMcp = lm[9];
 
-        // 1. Check Curls (Binary Pass/Fail)
-        for (const f of fingers) {
-            const required = pose.curls[f];
-            if (required === 'Any') {
-                score += 1;
-                continue;
-            }
+        const tipDistance = VectorMath.dist(thumbTip, indexTip);
+        const fingerBaseDist = VectorMath.dist(indexMcp, middleMcp);
 
-            if (currentCurls[f] === required) {
-                score += 1;
-            } else {
-                return 0; // Immediate Fail if curl is wrong
-            }
-        }
+        // Tips are "touching" if they're closer than the distance between finger bases
+        // Using 1.8x multiplier for more lenient detection (F gesture)
+        return tipDistance < fingerBaseDist * 1.8;
+    }
 
-        // 2. Check Vectors (Analog Score)
-        // Only check if defined in library
-        if (pose.directions) {
-            let vectorScore = 0;
-            let vectorCount = 0;
+    // Get spread ratio between index and middle fingers
+    private getFingerSpread(lm: Point3D[]): number {
+        const indexTip = lm[8];
+        const middleTip = lm[12];
+        const indexMcp = lm[5];
+        const middleMcp = lm[9];
 
-            for (const [fName, targetDir] of Object.entries(pose.directions)) {
-                const finger = fName as FingerName;
-                // Map finger name to indices
-                const indices: Record<FingerName, [number, number]> = {
-                    thumb: [2, 4],
-                    index: [5, 8],
-                    middle: [9, 12],
-                    ring: [13, 16],
-                    pinky: [17, 20]
-                };
-                const [start, end] = indices[finger];
+        const tipDist = VectorMath.dist(indexTip, middleTip);
+        const mcpDist = VectorMath.dist(indexMcp, middleMcp);
 
-                // Get finger vector in World Space
-                const fingerVec = VectorMath.normalize(VectorMath.sub(lm[end], lm[start]));
-
-                // Convert World Space -> Local Hand Space
-                const localVec = {
-                    x: VectorMath.dot(fingerVec, basis.x),
-                    y: VectorMath.dot(fingerVec, basis.y),
-                    z: VectorMath.dot(fingerVec, basis.z)
-                };
-
-                // Compare with Target
-                const similarity = VectorMath.dot(localVec, VectorMath.normalize(targetDir));
-                vectorScore += similarity;
-                vectorCount++;
-            }
-
-            // Add normalized vector score (0 to 1) to base score (5)
-            if (vectorCount > 0) {
-                score += (vectorScore / vectorCount);
-            }
-        }
-
-        // Max potential score is 5 (curls) + 1 (vectors) = 6.
-        return score / 6;
+        return mcpDist > 0 ? tipDist / mcpDist : 0;
     }
 }
