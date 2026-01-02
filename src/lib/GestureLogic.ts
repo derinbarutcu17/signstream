@@ -74,11 +74,8 @@ export class GestureLogic {
         if (fingerCount === 1) {
             // Pinky only
             if (ext.pinky && !ext.ring && !ext.middle && !ext.index) {
-                // Y = thumb extended OR sticking out to the side
-                // I = pinky only, thumb completely tucked
-                // Use either ext.thumb OR thumbOut to catch Y more reliably
-                const thumbVisible = ext.thumb || thumbOut;
-                return { match: thumbVisible ? 'Y' : 'I', score: 1.0 };
+                // Y = thumb also extended, I = just pinky
+                return { match: ext.thumb ? 'Y' : 'I', score: 1.0 };
             }
             // Index only
             // L = thumb ALSO extended (L-shape with thumb + index)
@@ -108,12 +105,13 @@ export class GestureLogic {
         };
 
         // Thumb: check if tip is far from index base
+        // Made more lenient (0.5 instead of 0.7) for easier Y gesture detection
         const thumbExtended = () => {
             const thumbTip = lm[4];
             const indexMcp = lm[5];
             const tipToIndex = VectorMath.dist(thumbTip, indexMcp);
             const wristToIndex = VectorMath.dist(wrist, indexMcp);
-            return tipToIndex > wristToIndex * 0.7;
+            return tipToIndex > wristToIndex * 0.5;
         };
 
         return {
