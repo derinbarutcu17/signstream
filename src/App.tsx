@@ -43,18 +43,20 @@ function App() {
   // Use the new GestureLogic detection directly
   const displayedLetter = detectionData.bestMatch;
 
-  // Compute match-based accuracy with smoothing
+  // Compute GENUINE accuracy: MediaPipe confidence when matched, 0 when not
   const displayedAccuracy = useMemo(() => {
-    // Raw accuracy: 100% if match, 0% otherwise
     const isMatch = displayedLetter === targetLetter;
-    const rawAccuracy = isMatch ? 100 : 0;
 
-    // Apply exponential moving average for smooth transitions
-    const smoothingFactor = 0.2;
+    // When matched: use MediaPipe's real hand detection confidence (typically 70-99%)
+    // When not matched: 0%
+    const rawAccuracy = isMatch ? detectionData.confidence * 100 : 0;
+
+    // Apply light smoothing for less jitter (but keeps natural variation)
+    const smoothingFactor = 0.3;
     smoothedAccuracyRef.current = smoothedAccuracyRef.current * (1 - smoothingFactor) + rawAccuracy * smoothingFactor;
 
     return Math.round(smoothedAccuracyRef.current);
-  }, [displayedLetter, targetLetter]);
+  }, [displayedLetter, targetLetter, detectionData.confidence]);
 
   return (
     <main className="h-dvh w-dvw bg-zinc-950 flex flex-col transition-colors duration-700 font-sans">
