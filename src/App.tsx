@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import WebcamTile from './components/dashboard/WebcamTile';
 import GoalTile from './components/dashboard/GoalTile';
 import FeedbackTile from './components/dashboard/FeedbackTile';
@@ -31,6 +31,9 @@ function App() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const { isReady, results, detectionData } = useHandTracking(videoRef);
 
+  // Smoothed accuracy ref for EMA
+  const smoothedAccuracyRef = useRef(0);
+
   const targetLetter = ALPHABET[targetIndex];
 
   // Score when detection matches target
@@ -39,7 +42,19 @@ function App() {
 
   // Use the new GestureLogic detection directly
   const displayedLetter = detectionData.bestMatch;
-  const displayedConfidence = detectionData.similarity > 0 ? detectionData.similarity : 0;
+
+  // Compute match-based accuracy with smoothing
+  const displayedAccuracy = useMemo(() => {
+    // Raw accuracy: 100% if match, 0% otherwise
+    const isMatch = displayedLetter === targetLetter;
+    const rawAccuracy = isMatch ? 100 : 0;
+
+    // Apply exponential moving average for smooth transitions
+    const smoothingFactor = 0.2;
+    smoothedAccuracyRef.current = smoothedAccuracyRef.current * (1 - smoothingFactor) + rawAccuracy * smoothingFactor;
+
+    return Math.round(smoothedAccuracyRef.current);
+  }, [displayedLetter, targetLetter]);
 
   return (
     <main className="h-dvh w-dvw bg-zinc-950 flex flex-col transition-colors duration-700 font-sans">
@@ -67,7 +82,7 @@ function App() {
             {displayedLetter ? `Detecting: ${displayedLetter}` : 'No match'}
           </div>
           <span className="text-[10px] text-zinc-500">
-            {displayedConfidence > 0 ? `${(displayedConfidence * 100).toFixed(0)}%` : '--'}
+            {displayedAccuracy > 0 ? `${displayedAccuracy}%` : '--'}
           </span>
         </div>
       </header>
@@ -88,7 +103,7 @@ function App() {
             onPrev={handlePrev}
           />
           <ScoreTile
-            score={Math.round(displayedConfidence * 100)}
+            score={displayedAccuracy}
             totalScore={score}
           />
           <FeedbackTile
