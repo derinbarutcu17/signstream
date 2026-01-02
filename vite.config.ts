@@ -2,8 +2,8 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [react()],
-  // GitHub Pages deployment: set base to repo name
-  base: '/signstream/',
-})
+  // GitHub Pages deployment: only set base for production build
+  base: command === 'build' ? '/signstream/' : '/',
+}))
